@@ -2,6 +2,9 @@
 
 A professional, high-fidelity Single Page Application (SPA) dashboard built with vanilla web technologies to analyze, filter, and extract consumer metrics from your active LPG reports.
 
+### 🌐 Live Link / Website URL
+👉 **[Open LPG Consumer Dashboard Online](https://rahulmaithili.github.io/lpg-consumer-dashboard/)**
+
 ## Features
 
 1. **Dashboard & Analytics**:
