@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LPG Consumer Dashboard & Bulk Search Tool</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Lucide Icons -->
+    <script src="https://cdn.jsdelivr.net/npm/lucide/dist/umd/lucide.min.js"></script>
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <!-- SheetJS for Excel parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- App Container -->
+    <div id="app" class="app-container">
+        
+        <!-- ================= UPLOAD VIEW ================= -->
+        <div id="upload-view" class="view-panel active-view">
+            <div class="upload-card">
+                <div class="brand-header">
+                    <div class="logo-icon">
+                        <i data-lucide="flame"></i>
+                    </div>
+                    <h1>LPG Consumer Analytics</h1>
+                    <p>Upload your active consumer report to generate insights and perform bulk searches</p>
+                </div>
+
+                <div id="drop-zone" class="drop-zone">
+                    <input type="file" id="csv-file-input" accept=".csv" class="file-input">
+                    <div class="drop-zone-content">
+                        <div class="upload-icon-pulse">
+                            <i data-lucide="upload-cloud"></i>
+                        </div>
+                        <h3>Drag & drop your CSV file here</h3>
+                        <p>or click to browse your computer</p>
+                        <span class="file-spec">Supported format: CSV (e.g. ActiveConsumer_Report.csv)</span>
+                    </div>
+                </div>
+
+                <!-- Parse progress & loading state -->
+                <div id="upload-progress-container" class="progress-container hidden">
+                    <div class="progress-bar-wrapper">
+                        <div id="upload-progress-bar" class="progress-bar"></div>
+                    </div>
+                    <p id="upload-progress-status">Parsing CSV file... 0%</p>
+                </div>
+
+                <!-- Error Message -->
+                <div id="upload-error" class="error-banner hidden">
+                    <i data-lucide="alert-circle"></i>
+                    <span id="upload-error-text">Failed to parse CSV file. Please make sure it's valid.</span>
+                </div>
+
+                <!-- Sample File Note -->
+                <div class="upload-footer-info">
+                    <i data-lucide="info"></i>
+                    <span>This tool runs entirely in your browser. Your data is kept private and secure.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= MAIN DASHBOARD LAYOUT ================= -->
+        <div id="main-view" class="view-panel hidden">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <div class="sidebar-brand">
+                    <div class="brand-icon">
+                        <i data-lucide="flame"></i>
+                    </div>
+                    <span>LPG Portal</span>
+                </div>
+
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-tab="dashboard-tab">
+                        <i data-lucide="layout-dashboard"></i>
+                        <span>Dashboard</span>
+                    </button>
+                    <button class="nav-item" data-tab="bulk-search-tab">
+                        <i data-lucide="search-code"></i>
+                        <span>Bulk Search</span>
+                    </button>
+                    <button class="nav-item" data-tab="all-consumers-tab">
+                        <i data-lucide="users"></i>
+                        <span>All Consumers</span>
+                    </button>
+                    <button class="nav-item" data-tab="excel-filler-tab">
+                        <i data-lucide="file-spreadsheet"></i>
+                        <span>Excel Auto-Filler</span>
+                    </button>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <div class="db-status-card">
+                        <div class="status-indicator online"></div>
+                        <div class="status-info">
+                            <span class="status-label">Database Loaded</span>
+                            <span id="sidebar-record-count" class="status-value">0 consumers</span>
+                        </div>
+                    </div>
+                    <button id="btn-remove-data" class="btn-remove-data">
+                        <i data-lucide="trash-2"></i>
+                        <span>Remove Data</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Workspace -->
+            <main class="workspace">
+                <!-- Top Navbar -->
+                <header class="navbar">
+                    <div class="nav-left">
+                        <h2 id="current-view-title">Dashboard Overview</h2>
+                    </div>
+                    <div class="nav-right">
+                        <!-- Quick Search -->
+                        <div class="search-box">
+                            <i data-lucide="search"></i>
+                            <input type="text" id="navbar-quick-search" placeholder="Search Consumer No. or Name...">
+                            <div id="quick-search-results" class="quick-results-dropdown hidden"></div>
+                        </div>
+
+                        <!-- Theme Toggle -->
+                        <button id="theme-toggle" class="nav-btn" title="Toggle Theme">
+                            <i data-lucide="sun" class="sun-icon"></i>
+                            <i data-lucide="moon" class="moon-icon"></i>
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Workspace Content (Dynamic Tabs) -->
+                <div class="workspace-content">
+                    
+                    <!-- TAB 1: DASHBOARD STATS -->
+                    <div id="dashboard-tab" class="tab-pane active">
+                        <!-- KPI Metric Cards Grid -->
+                        <div class="kpi-grid">
+                            <div class="kpi-card">
+                                <div class="kpi-icon blue">
+                                    <i data-lucide="users"></i>
+                                </div>
+                                <div class="kpi-details">
+                                    <h3>Total Consumers</h3>
+                                    <span id="kpi-total-consumers" class="kpi-val">0</span>
+                                </div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="kpi-icon green">
+                                    <i data-lucide="shield-check"></i>
+                                </div>
+                                <div class="kpi-details">
+                                    <h3>eKYC Verified</h3>
+                                    <span id="kpi-ekyc-rate" class="kpi-val">0%</span>
+                                    <span id="kpi-ekyc-count" class="kpi-sub">0 of 0</span>
+                                </div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="kpi-icon gold">
+                                    <i data-lucide="indian-rupee"></i>
+                                </div>
+                                <div class="kpi-details">
+                                    <h3>Total Security Deposit</h3>
+                                    <span id="kpi-total-deposit" class="kpi-val">₹0</span>
+                                </div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="kpi-icon purple">
+                                    <i data-lucide="container"></i>
+                                </div>
+                                <div class="kpi-details">
+                                    <h3>Domestic (14.2kg)</h3>
+                                    <span id="kpi-domestic-count" class="kpi-val">0</span>
+                                    <span id="kpi-domestic-pct" class="kpi-sub">0% of total</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Charts Visualizations Section -->
+                        <div class="charts-section-grid">
+                            <div class="chart-card large">
+                                <div class="chart-header">
+                                    <h3>Cylinder Package Distribution</h3>
+                                    <span class="chart-subtitle">Top packaging categories used by active consumers</span>
+                                </div>
+                                <div class="chart-body">
+                                    <canvas id="chart-package"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-header">
+                                    <h3>eKYC Status</h3>
+                                    <span class="chart-subtitle">Proportion of verified vs unverified users</span>
+                                </div>
+                                <div class="chart-body compact">
+                                    <canvas id="chart-ekyc"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-header">
+                                    <h3>Connection Type</h3>
+                                    <span class="chart-subtitle">Domestic, Commercial, or other packages</span>
+                                </div>
+                                <div class="chart-body compact">
+                                    <canvas id="chart-connection-type"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-card large">
+                                <div class="chart-header">
+                                    <h3>Top Consumer Areas (LPG Supply distribution)</h3>
+                                    <span class="chart-subtitle">Active distribution regions with highest counts</span>
+                                </div>
+                                <div class="chart-body">
+                                    <canvas id="chart-area"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: BULK SEARCH -->
+                    <div id="bulk-search-tab" class="tab-pane">
+                        <div class="bulk-container">
+                            <div class="bulk-input-panel">
+                                <div class="panel-header">
+                                    <h3>Enter Consumer Numbers</h3>
+                                    <p>Paste multiple consumer numbers separated by spaces, commas, or new lines.</p>
+                                </div>
+                                <textarea id="bulk-input-textarea" placeholder="Example:
+608892
+608894
+608895
+608900
+608904"></textarea>
+                                <div class="bulk-file-upload-section" style="margin-bottom: 0.5rem;">
+                                    <label for="bulk-excel-file-input" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; border: 1px dashed var(--border-color); padding: 0.6rem; font-size: 0.8rem; border-radius: 8px;">
+                                        <i data-lucide="file-spreadsheet" style="width: 16px; height: 16px;"></i>
+                                        <span>Upload Excel/CSV Sheet</span>
+                                    </label>
+                                    <input type="file" id="bulk-excel-file-input" accept=".xlsx,.xls,.csv" style="display: none;">
+                                </div>
+                                <div class="bulk-controls">
+                                    <button id="btn-clear-bulk" class="btn-secondary">
+                                        <i data-lucide="x"></i>
+                                        Clear Input
+                                    </button>
+                                    <button id="btn-search-bulk" class="btn-primary">
+                                        <i data-lucide="search"></i>
+                                        Search Consumers
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="bulk-results-panel">
+                                <div class="results-header">
+                                    <div class="results-info-text">
+                                        <h3>Search Results</h3>
+                                        <span id="bulk-match-summary" class="badge">0 matches found</span>
+                                    </div>
+                                    <div class="results-actions">
+                                        <button id="btn-export-excel" class="btn-action green hidden" title="Export matching data as CSV sheet">
+                                            <i data-lucide="download"></i>
+                                            <span>Export Sheet</span>
+                                        </button>
+                                        <button id="btn-print-bulk" class="btn-action blue hidden" title="Print results list as PDF">
+                                            <i data-lucide="printer"></i>
+                                            <span>Print PDF</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Unmatched Warnings Box -->
+                                <div id="bulk-unmatched-container" class="unmatched-warning-box hidden">
+                                    <div class="warning-title">
+                                        <i data-lucide="alert-triangle"></i>
+                                        <span>Consumer Numbers Not Found (<span id="bulk-unmatched-count">0</span>):</span>
+                                    </div>
+                                    <div id="bulk-unmatched-list" class="warning-list"></div>
+                                </div>
+
+                                <div class="table-scroll-container">
+                                    <table id="bulk-results-table" class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 40px; text-align: center;"><input type="checkbox" id="bulk-select-all-checkbox" checked></th>
+                                                <th>Consumer No</th>
+                                                <th>Consumer Name</th>
+                                                <th>Mobile No</th>
+                                                <th>Area</th>
+                                                <th>Package Description</th>
+                                                <th>Last Delivery</th>
+                                                <th>Days Ago</th>
+                                                <th>eKYC</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="bulk-results-body">
+                                            <tr>
+                                                <td colspan="10" class="table-placeholder">
+                                                    <i data-lucide="text-cursor-input"></i>
+                                                    <p>Provide consumer numbers on the left and click Search</p>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: ALL CONSUMERS TAB -->
+                    <div id="all-consumers-tab" class="tab-pane">
+                        <div class="table-controls">
+                            <div class="search-bar-inline">
+                                <i data-lucide="search"></i>
+                                <input type="text" id="inline-all-search" placeholder="Filter consumers by Name, ID, Phone, Area...">
+                            </div>
+                            <div class="pagination-controls">
+                                <button id="btn-prev-page" class="btn-icon" disabled><i data-lucide="chevron-left"></i></button>
+                                <span id="page-indicator">Page 1 of 1</span>
+                                <button id="btn-next-page" class="btn-icon"><i data-lucide="chevron-right"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="table-scroll-container main-list">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Consumer No</th>
+                                        <th>Consumer Name</th>
+                                        <th>Mobile No</th>
+                                        <th>Area</th>
+                                        <th>Last Delivery</th>
+                                        <th>Days Ago</th>
+                                        <th>eKYC</th>
+                                        <th>Package Code</th>
+                                        <th>Deposit</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="all-consumers-table-body">
+                                    <!-- Populated programmatically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- TAB 4: EXCEL AUTO-FILLER TAB -->
+                    <div id="excel-filler-tab" class="tab-pane">
+                        <div class="card" style="max-width: 700px; margin: 2rem auto; padding: 2.5rem; text-align: center;">
+                            <div style="margin-bottom: 2rem;">
+                                <div style="width: 60px; height: 60px; border-radius: 12px; background-color: rgba(99, 102, 241, 0.1); color: var(--accent-blue); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem auto;">
+                                    <i data-lucide="file-spreadsheet" style="width: 32px; height: 32px;"></i>
+                                </div>
+                                <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.6rem; font-weight: 700; margin-bottom: 0.5rem;">Excel Auto-Filler</h2>
+                                <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;">
+                                    Upload your Excel/CSV sheet (e.g. <code>Regulator Entry.xlsx</code>) containing consumer numbers. We will automatically search our database to fill in the missing <strong>Customer Name</strong> and <strong>Mobile Number</strong> for you.
+                                </p>
+                            </div>
+
+                            <div id="filler-upload-zone" style="border: 2px dashed var(--border-color); border-radius: 12px; padding: 3rem 2rem; cursor: pointer; transition: all 0.3s ease; background-color: var(--bg-secondary); margin-bottom: 2rem;">
+                                <input type="file" id="filler-file-input" accept=".xlsx,.xls,.csv" style="display: none;">
+                                <i data-lucide="upload-cloud" style="width: 48px; height: 48px; color: var(--text-muted); margin-bottom: 1rem;"></i>
+                                <p style="font-weight: 600; margin-bottom: 0.25rem;">Drag & drop your Excel file here</p>
+                                <p style="color: var(--text-muted); font-size: 0.8rem;">or click to browse your computer (.xlsx, .xls, .csv)</p>
+                            </div>
+
+                            <div id="filler-results-card" class="hidden" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; text-align: left; margin-bottom: 2rem;">
+                                <h4 style="font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <i data-lucide="check-circle-2" style="color: var(--accent-green); width: 20px; height: 20px;"></i>
+                                    Processing Complete
+                                </h4>
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+                                    <div style="background-color: var(--bg-tertiary); padding: 0.75rem; border-radius: 8px; text-align: center;">
+                                        <div id="filler-stat-total" style="font-size: 1.25rem; font-weight: 700;">0</div>
+                                        <div style="font-size: 0.75rem; color: var(--text-muted);">Total Rows</div>
+                                    </div>
+                                    <div style="background-color: var(--bg-tertiary); padding: 0.75rem; border-radius: 8px; text-align: center;">
+                                        <div id="filler-stat-matched" style="font-size: 1.25rem; font-weight: 700; color: var(--accent-green);">0</div>
+                                        <div style="font-size: 0.75rem; color: var(--text-muted);">Matched (Filled)</div>
+                                    </div>
+                                    <div style="background-color: var(--bg-tertiary); padding: 0.75rem; border-radius: 8px; text-align: center;">
+                                        <div id="filler-stat-unmatched" style="font-size: 1.25rem; font-weight: 700; color: var(--accent-gold);">0</div>
+                                        <div style="font-size: 0.75rem; color: var(--text-muted);">Unmatched (Blank)</div>
+                                    </div>
+                                </div>
+                                <button id="btn-download-enriched" class="btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem;">
+                                    <i data-lucide="download"></i>
+                                    Download Enriched Excel Sheet
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+
+        <!-- ================= DETAIL VIEW MODAL ================= -->
+        <div id="detail-modal" class="modal-overlay hidden">
+            <div class="modal-card">
+                <header class="modal-header no-print">
+                    <h3>Consumer Profile Details</h3>
+                    <div class="modal-actions">
+                        <button id="btn-print-single" class="btn-icon" title="Print Profile Page"><i data-lucide="printer"></i></button>
+                        <button id="btn-close-modal" class="btn-icon" title="Close"><i data-lucide="x"></i></button>
+                    </div>
+                </header>
+
+                <div id="print-area" class="print-container">
+                    <!-- Profile Header / Invoice Header -->
+                    <div class="profile-invoice-header">
+                        <div class="invoice-logo">
+                            <i data-lucide="flame"></i>
+                            <div class="invoice-logo-text">
+                                <h2>LPG ACTIVE CONSUMER REPORT</h2>
+                                <p>OFFICIAL DIGITAL DOCUMENT</p>
+                            </div>
+                        </div>
+                        <div class="invoice-meta">
+                            <div><strong>Date generated:</strong> <span class="current-date-span">--/--/----</span></div>
+                            <div><strong>Consumer Status:</strong> <span class="badge green">ACTIVE</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Profile Grid -->
+                    <div class="profile-sections">
+                        <!-- Left Block: Customer Identity -->
+                        <div class="profile-block">
+                            <h4 class="block-title"><i data-lucide="user"></i> Personal Details</h4>
+                            <div class="block-fields">
+                                <div class="field-row">
+                                    <span class="field-lbl">Consumer No:</span>
+                                    <span id="detail-no" class="field-val highlight">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">Full Name:</span>
+                                    <span id="detail-name" class="field-val text-bold">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">Mobile No:</span>
+                                    <span id="detail-mobile" class="field-val">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">Alt Phone:</span>
+                                    <span id="detail-phone" class="field-val">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">Email:</span>
+                                    <span id="detail-email" class="field-val">------</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Block: Account Details -->
+                        <div class="profile-block">
+                            <h4 class="block-title"><i data-lucide="shield-check"></i> Connection & eKYC</h4>
+                            <div class="block-fields">
+                                <div class="field-row">
+                                    <span class="field-lbl">Connection Type:</span>
+                                    <span id="detail-conn-type" class="field-val">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">Nature:</span>
+                                    <span id="detail-conn-nature" class="field-val">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">eKYC Verification:</span>
+                                    <span id="detail-ekyc-flag" class="field-val badge-ekyc">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">eKYC Date:</span>
+                                    <span id="detail-ekyc-date" class="field-val">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">Avg Monthly Use:</span>
+                                    <span id="detail-avg-consumption" class="field-val">------ Cylinder(s)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Address Row (Span full width) -->
+                        <div class="profile-block span-full">
+                            <h4 class="block-title"><i data-lucide="map-pin"></i> Address & Distribution</h4>
+                            <div class="block-fields address-grid">
+                                <div class="field-row">
+                                    <span class="field-lbl">Address Line 1:</span>
+                                    <span id="detail-addr1" class="field-val">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">Address Line 2:</span>
+                                    <span id="detail-addr2" class="field-val">------</span>
+                                </div>
+                                <div class="field-row">
+                                    <span class="field-lbl">Address Line 3:</span>
+                                    <span id="detail-addr3" class="field-val">------</span>
+                                </div>
+                                <div class="address-subgroup">
+                                    <div class="field-row">
+                                        <span class="field-lbl">PIN Code:</span>
+                                        <span id="detail-pin" class="field-val">------</span>
+                                    </div>
+                                    <div class="field-row">
+                                        <span class="field-lbl">Area Name:</span>
+                                        <span id="detail-area" class="field-val">------</span>
+                                    </div>
+                                    <div class="field-row">
+                                        <span class="field-lbl">Taluka:</span>
+                                        <span id="detail-taluka" class="field-val">------</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Refill & Safety Audit Block (Hidden by default, shown if data exists) -->
+                        <div id="detail-audit-block" class="profile-block span-full hidden">
+                            <h4 class="block-title"><i data-lucide="info"></i> Refill, Safety & Bank Details</h4>
+                            <div class="block-fields address-grid">
+                                <div class="address-subgroup" style="grid-template-columns: repeat(2, 1fr);">
+                                    <div class="field-row">
+                                        <span class="field-lbl">LPG ID:</span>
+                                        <span id="detail-lpg-id" class="field-val">------</span>
+                                    </div>
+                                    <div class="field-row">
+                                        <span class="field-lbl">Aadhar Card:</span>
+                                        <span id="detail-aadhar" class="field-val">------</span>
+                                    </div>
+                                </div>
+                                <div class="address-subgroup">
+                                    <div class="field-row">
+                                        <span class="field-lbl">Last Refill Date:</span>
+                                        <span id="detail-refill-date" class="field-val highlight">------</span>
+                                    </div>
+                                    <div class="field-row">
+                                        <span class="field-lbl">Refill Booking Source:</span>
+                                        <span id="detail-refill-source" class="field-val">------</span>
+                                    </div>
+                                    <div class="field-row">
+                                        <span class="field-lbl">Subsidy Eligible:</span>
+                                        <span id="detail-subsidy" class="field-val">------</span>
+                                    </div>
+                                </div>
+                                <div class="address-subgroup">
+                                    <div class="field-row">
+                                        <span class="field-lbl">Safety Inspection:</span>
+                                        <span id="detail-inspection-status" class="field-val">------</span>
+                                    </div>
+                                    <div class="field-row">
+                                        <span class="field-lbl">Inspection Date:</span>
+                                        <span id="detail-inspection-date" class="field-val">------</span>
+                                    </div>
+                                    <div class="field-row">
+                                        <span class="field-lbl">Hose Validity Date:</span>
+                                        <span id="detail-hose-validity" class="field-val">------</span>
+                                    </div>
+                                </div>
+                                <div class="address-subgroup" style="grid-template-columns: repeat(2, 1fr);">
+                                    <div class="field-row">
+                                        <span class="field-lbl">Bank Account No:</span>
+                                        <span id="detail-bank-account" class="field-val">------</span>
+                                    </div>
+                                    <div class="field-row">
+                                        <span class="field-lbl">Bank IFSC Code:</span>
+                                        <span id="detail-bank-ifsc" class="field-val">------</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Package and financial info -->
+                        <div class="profile-block span-full">
+                            <h4 class="block-title"><i data-lucide="indian-rupee"></i> Package & Deposit Details</h4>
+                            <table class="detail-charges-table">
+                                <thead>
+                                    <tr>
+                                        <th>Equipment/Package</th>
+                                        <th>Description</th>
+                                        <th>Code</th>
+                                        <th class="txt-center">Qty</th>
+                                        <th class="txt-right">Deposit Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Cylinder</strong></td>
+                                        <td id="detail-cylinder-desc">------</td>
+                                        <td id="detail-cylinder-code">------</td>
+                                        <td id="detail-cylinder-qty" class="txt-center">--</td>
+                                        <td id="detail-cylinder-deposit" class="txt-right">₹0.00</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Regulator</strong></td>
+                                        <td id="detail-regulator-desc">------</td>
+                                        <td id="detail-regulator-code">------</td>
+                                        <td id="detail-regulator-qty" class="txt-center">--</td>
+                                        <td id="detail-regulator-deposit" class="txt-right">₹0.00</td>
+                                    </tr>
+                                    <tr class="add-cylinder-row">
+                                        <td><strong>Additional Cyl.</strong></td>
+                                        <td>Additional Cylinder Reservation</td>
+                                        <td>-</td>
+                                        <td id="detail-add-cylinder-qty" class="txt-center">--</td>
+                                        <td class="txt-right">₹0.00</td>
+                                    </tr>
+                                    <tr class="total-row">
+                                        <td colspan="4" class="txt-right"><strong>Grand Total Deposit:</strong></td>
+                                        <td id="detail-total-deposit" class="txt-right highlighted-amount">₹0.00</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Footer for paper printing -->
+                    <div class="print-footer">
+                        <p>This is a system-generated profile printout compiled from the active LPG records.</p>
+                        <p>Verify details in the offline ledger if discrepancies arise.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- App Logic -->
+    <script src="app.js"></script>
+</body>
+</html>

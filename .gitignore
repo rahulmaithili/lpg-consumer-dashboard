@@ -1,0 +1,10 @@
+# Exclude the Chrome Extension folder (since it is a separate repository)
+hpcl_autofiller/
+
+# Exclude consumer/excel data spreadsheets containing customer records
+*.csv
+*.xlsx
+*.xls
+
+# Exclude system and local server temporary files
+.gemini/
