@@ -361,7 +361,7 @@ async function loadDashboardFromDB() {
         showView("main-view");
     } catch (error) {
         console.error("Error loading dashboard data:", error);
-        alert("Failed to load dashboard data from database cache.");
+        alert("Failed to load dashboard data from database cache.\n\nError: " + error.message + "\n\nStack: " + error.stack);
         showView("upload-view");
     }
 }
