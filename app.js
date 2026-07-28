@@ -883,8 +883,27 @@ function handleBulkExcelUpload(event) {
     reader.readAsArrayBuffer(file);
 }
 
+let uploadedWorkbook = null;
+let uploadedFirstSheetName = "";
+let uploadedSheetData = [];
 let enrichedWorkbook = null;
 let enrichedFileName = "";
+
+const DB_FIELDS_OPTIONS = [
+    { value: "", label: "[Do not fill / None]" },
+    { value: "ConsumerName", label: "Customer Name" },
+    { value: "MobileNo", label: "Consumer Contact No. (Mobile)" },
+    { value: "LpgId", label: "LPG ID" },
+    { value: "Address", label: "Address" },
+    { value: "Area", label: "Delivery Area" },
+    { value: "LastRefillDate", label: "Last Refill Date" },
+    { value: "SafetyInspectionDate", label: "Safety Inspection Date" },
+    { value: "BankAccountNo", label: "Bank Account Number" },
+    { value: "BankIfscCode", label: "IFSC Code" },
+    { value: "EKYCFlag", label: "eKYC Status (Y/N)" },
+    { value: "TypeOfConnection", label: "Connection Type" },
+    { value: "PackageCodeDescription", label: "Package Description" }
+];
 
 function handleExcelAutoFill(event) {
     const file = event.target.files[0];
@@ -906,9 +925,26 @@ function handleExcelAutoFill(event) {
                 return;
             }
 
-            // Find key dynamically
+            // Save globally for mapping
+            uploadedWorkbook = workbook;
+            uploadedFirstSheetName = firstSheetName;
+            uploadedSheetData = sheetData;
+
+            // Extract headers
             const headers = Object.keys(sheetData[0]);
-            const consumerNoKey = headers.find(h => {
+
+            // Populate match key select
+            const matchKeySelect = document.getElementById("filler-match-key-select");
+            matchKeySelect.innerHTML = "";
+            headers.forEach(h => {
+                const opt = document.createElement("option");
+                opt.value = h;
+                opt.textContent = h;
+                matchKeySelect.appendChild(opt);
+            });
+
+            // Auto-detect match key (Consumer No)
+            const detectedKey = headers.find(h => {
                 const clean = h.trim().toLowerCase().replace(/[\s_\-\.]/g, '');
                 return clean.includes("consumerno") || 
                        clean.includes("customerno") || 
@@ -916,89 +952,175 @@ function handleExcelAutoFill(event) {
                        clean.includes("customerid") ||
                        clean === "consumerno" ||
                        clean === "customerno";
-            });
+            }) || headers[0];
+            matchKeySelect.value = detectedKey;
 
-            if (!consumerNoKey) {
-                alert("Could not find a column named 'Consumer No' or 'Customer No' in the uploaded sheet.\nAvailable columns: " + headers.join(", "));
-                return;
-            }
+            // Populate columns mapping list
+            const mappingContainer = document.getElementById("filler-columns-mapping-container");
+            mappingContainer.innerHTML = "";
 
-            // Identify or default Name and Mobile headers
-            let nameKey = headers.find(h => {
+            headers.forEach(h => {
+                const rowDiv = document.createElement("div");
+                rowDiv.style = "display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: center; background-color: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 0.25rem;";
+
+                const label = document.createElement("span");
+                label.style = "font-size: 0.8rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-main);";
+                label.textContent = h;
+                label.title = h;
+
+                const select = document.createElement("select");
+                select.className = "filler-target-field-select";
+                select.setAttribute("data-column", h);
+                select.style = "width: 100%; padding: 0.4rem 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: 0.8rem; outline: none;";
+
+                DB_FIELDS_OPTIONS.forEach(opt => {
+                    const option = document.createElement("option");
+                    option.value = opt.value;
+                    option.textContent = opt.label;
+                    select.appendChild(option);
+                });
+
+                // Auto-detect target field mapping
                 const clean = h.trim().toLowerCase().replace(/[\s_\-\.]/g, '');
-                return clean === "customername" || clean === "consumername" || clean === "name";
-            }) || "Customer Name";
-
-            let mobileKey = headers.find(h => {
-                const clean = h.trim().toLowerCase().replace(/[\s_\-\.]/g, '');
-                return clean.includes("contact") || clean.includes("mobile") || clean.includes("phone");
-            }) || "Consumer Contact No.";
-
-            // Look up all keys in IndexedDB
-            const nos = sheetData
-                .map(row => {
-                    const rawVal = row[consumerNoKey];
-                    if (rawVal === undefined || rawVal === null) return "";
-                    return rawVal.toString().trim().replace(/^'/, '');
-                })
-                .filter(num => num.length > 0 && !isNaN(num));
-
-            if (nos.length === 0) {
-                alert("No valid consumer numbers found in the sheet.");
-                return;
-            }
-
-            const matches = await getConsumersByNos(nos);
-            const matchMap = new Map();
-            matches.forEach(c => {
-                matchMap.set(c.ConsumerNo, c);
-            });
-
-            let matchedCount = 0;
-            let unmatchedCount = 0;
-
-            const updatedData = sheetData.map(row => {
-                const rawVal = row[consumerNoKey];
-                const consumerNo = rawVal ? rawVal.toString().trim().replace(/^'/, '') : "";
-                const matchedRecord = matchMap.get(consumerNo);
-
-                if (matchedRecord) {
-                    row[nameKey] = matchedRecord.ConsumerName || "";
-                    row[mobileKey] = matchedRecord.MobileNo || "";
-                    matchedCount++;
+                if (clean === "customername" || clean === "consumername" || clean === "name") {
+                    select.value = "ConsumerName";
+                } else if (clean.includes("contact") || clean.includes("mobile") || clean.includes("phone")) {
+                    select.value = "MobileNo";
+                } else if (clean.includes("lpgid") || clean.includes("lpg id")) {
+                    select.value = "LpgId";
+                } else if (clean.includes("address")) {
+                    select.value = "Address";
+                } else if (clean.includes("refill")) {
+                    select.value = "LastRefillDate";
+                } else if (clean.includes("inspection")) {
+                    select.value = "SafetyInspectionDate";
+                } else if (clean.includes("bank")) {
+                    select.value = "BankAccountNo";
+                } else if (clean.includes("ifsc")) {
+                    select.value = "BankIfscCode";
                 } else {
-                    row[nameKey] = "";
-                    row[mobileKey] = "";
-                    unmatchedCount++;
+                    select.value = ""; // Default to None
                 }
-                return row;
+
+                rowDiv.appendChild(label);
+                rowDiv.appendChild(select);
+                mappingContainer.appendChild(rowDiv);
             });
 
-            // Create new worksheet and save workbook
-            const newWorksheet = XLSX.utils.json_to_sheet(updatedData);
-            workbook.Sheets[firstSheetName] = newWorksheet;
-            enrichedWorkbook = workbook;
+            // Show mapping card & hide results
+            document.getElementById("filler-mapping-card").classList.remove("hidden");
+            document.getElementById("filler-results-card").classList.add("hidden");
 
-            // Update stats in UI
-            document.getElementById("filler-stat-total").textContent = sheetData.length.toLocaleString();
-            document.getElementById("filler-stat-matched").textContent = matchedCount.toLocaleString();
-            document.getElementById("filler-stat-unmatched").textContent = unmatchedCount.toLocaleString();
-
-            document.getElementById("filler-results-card").classList.remove("hidden");
-            
-            // Clear input value so same file can be uploaded again
+            // Reset file input value
             event.target.value = "";
 
             if (window.lucide) window.lucide.createIcons();
 
-            alert(`Enrichment complete! Filled details for ${matchedCount} matching consumers.`);
-
         } catch (err) {
-            console.error("Excel Auto-Filler Error:", err);
-            alert("An error occurred during Excel processing. Check file format.");
+            console.error("Excel Parsing Error:", err);
+            alert("Error parsing the file. Please ensure it is a valid Excel or CSV file.");
         }
     };
     reader.readAsArrayBuffer(file);
+}
+
+async function processExcelAutoFill() {
+    if (!uploadedSheetData || uploadedSheetData.length === 0) return;
+
+    const matchKeySelect = document.getElementById("filler-match-key-select");
+    const consumerNoKey = matchKeySelect.value;
+
+    if (!consumerNoKey) {
+        alert("Please select a valid Match Key column.");
+        return;
+    }
+
+    // Build mapping settings
+    const mappings = {}; // Excel column header -> Database field
+    const selects = document.querySelectorAll(".filler-target-field-select");
+    selects.forEach(select => {
+        const col = select.getAttribute("data-column");
+        const field = select.value;
+        if (field) {
+            mappings[col] = field;
+        }
+    });
+
+    if (Object.keys(mappings).length === 0) {
+        alert("Please map at least one column to fill from the database.");
+        return;
+    }
+
+    try {
+        // Collect all consumer numbers
+        const nos = uploadedSheetData
+            .map(row => {
+                const rawVal = row[consumerNoKey];
+                if (rawVal === undefined || rawVal === null) return "";
+                return rawVal.toString().trim().replace(/^'/, '');
+            })
+            .filter(num => num.length > 0 && !isNaN(num));
+
+        if (nos.length === 0) {
+            alert("No valid consumer numbers found in the selected Match Key column.");
+            return;
+        }
+
+        // Search in database
+        const matches = await getConsumersByNos(nos);
+        const matchMap = new Map();
+        matches.forEach(c => {
+            matchMap.set(c.ConsumerNo, c);
+        });
+
+        let matchedCount = 0;
+        let unmatchedCount = 0;
+
+        const updatedData = uploadedSheetData.map(row => {
+            const rawVal = row[consumerNoKey];
+            const consumerNo = rawVal ? rawVal.toString().trim().replace(/^'/, '') : "";
+            const matchedRecord = matchMap.get(consumerNo);
+
+            if (matchedRecord) {
+                // Fill all mapped columns
+                for (let col in mappings) {
+                    const field = mappings[col];
+                    row[col] = matchedRecord[field] || "";
+                }
+                matchedCount++;
+            } else {
+                // Leave mapped columns empty
+                for (let col in mappings) {
+                    row[col] = "";
+                }
+                unmatchedCount++;
+            }
+            return row;
+        });
+
+        // Create new worksheet and save in workbook
+        const newWorksheet = XLSX.utils.json_to_sheet(updatedData);
+        uploadedWorkbook.Sheets[uploadedFirstSheetName] = newWorksheet;
+        enrichedWorkbook = uploadedWorkbook;
+
+        // Hide mapping card, show results card
+        document.getElementById("filler-mapping-card").classList.add("hidden");
+        
+        // Update stats in UI
+        document.getElementById("filler-stat-total").textContent = uploadedSheetData.length.toLocaleString();
+        document.getElementById("filler-stat-matched").textContent = matchedCount.toLocaleString();
+        document.getElementById("filler-stat-unmatched").textContent = unmatchedCount.toLocaleString();
+
+        document.getElementById("filler-results-card").classList.remove("hidden");
+
+        if (window.lucide) window.lucide.createIcons();
+
+        alert(`Auto-fill complete! Successfully matched and filled details for ${matchedCount} consumers.`);
+
+    } catch (err) {
+        console.error("Excel Auto-Filler Processing Error:", err);
+        alert("An error occurred during matching and filling. Check database status.");
+    }
 }
 
 function downloadEnrichedFile() {
@@ -1548,6 +1670,11 @@ function initEventListeners() {
     const btnDownloadEnriched = document.getElementById("btn-download-enriched");
     if (btnDownloadEnriched) {
         btnDownloadEnriched.addEventListener("click", downloadEnrichedFile);
+    }
+
+    const btnProcessFiller = document.getElementById("btn-process-filler");
+    if (btnProcessFiller) {
+        btnProcessFiller.addEventListener("click", processExcelAutoFill);
     }
 }
 
