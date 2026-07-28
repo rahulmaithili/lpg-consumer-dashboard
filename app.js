@@ -905,6 +905,21 @@ const DB_FIELDS_OPTIONS = [
     { value: "PackageCodeDescription", label: "Package Description" }
 ];
 
+const FILLABLE_DB_FIELDS = [
+    { key: "ConsumerName", label: "Customer Name", defaultCol: "Customer Name" },
+    { key: "MobileNo", label: "Consumer Contact No. (Mobile)", defaultCol: "Consumer Contact No." },
+    { key: "LpgId", label: "LPG ID", defaultCol: "LPG ID" },
+    { key: "Address", label: "Address", defaultCol: "Address" },
+    { key: "Area", label: "Delivery Area", defaultCol: "Delivery Area" },
+    { key: "LastRefillDate", label: "Last Refill Date", defaultCol: "Last Refill Date" },
+    { key: "SafetyInspectionDate", label: "Safety Inspection Date", defaultCol: "Safety Inspection Date" },
+    { key: "BankAccountNo", label: "Bank Account Number", defaultCol: "Bank Account Number" },
+    { key: "BankIfscCode", label: "IFSC Code", defaultCol: "IFSC Code" },
+    { key: "EKYCFlag", label: "eKYC Status (Y/N)", defaultCol: "eKYC Status" },
+    { key: "TypeOfConnection", label: "Connection Type", defaultCol: "Connection Type" },
+    { key: "PackageCodeDescription", label: "Package Description", defaultCol: "Package Description" }
+];
+
 function handleExcelAutoFill(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -955,51 +970,67 @@ function handleExcelAutoFill(event) {
             }) || headers[0];
             matchKeySelect.value = detectedKey;
 
-            // Populate columns mapping list
+            // Populate columns mapping list based on database fields
             const mappingContainer = document.getElementById("filler-columns-mapping-container");
             mappingContainer.innerHTML = "";
 
-            headers.forEach(h => {
+            FILLABLE_DB_FIELDS.forEach(field => {
                 const rowDiv = document.createElement("div");
                 rowDiv.style = "display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: center; background-color: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 0.25rem;";
 
                 const label = document.createElement("span");
-                label.style = "font-size: 0.8rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-main);";
-                label.textContent = h;
-                label.title = h;
+                label.style = "font-size: 0.8rem; font-weight: 600; color: var(--text-main);";
+                label.textContent = field.label;
 
                 const select = document.createElement("select");
                 select.className = "filler-target-field-select";
-                select.setAttribute("data-column", h);
-                select.style = "width: 100%; padding: 0.4rem 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: 0.8rem; outline: none;";
+                select.setAttribute("data-db-field", field.key);
+                select.setAttribute("data-default-col", field.defaultCol);
+                select.style = "width: 100%; padding: 0.4rem 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: 0.85rem; outline: none;";
 
-                DB_FIELDS_OPTIONS.forEach(opt => {
-                    const option = document.createElement("option");
-                    option.value = opt.value;
-                    option.textContent = opt.label;
-                    select.appendChild(option);
+                // Add None option
+                const optNone = document.createElement("option");
+                optNone.value = "";
+                optNone.textContent = "[Do not fill / None]";
+                select.appendChild(optNone);
+
+                // Add Create New Column option
+                const optNew = document.createElement("option");
+                optNew.value = "__new__";
+                optNew.textContent = `[+ Create New Column: "${field.defaultCol}"]`;
+                select.appendChild(optNew);
+
+                // Add existing Excel headers
+                headers.forEach(h => {
+                    const optHeader = document.createElement("option");
+                    optHeader.value = h;
+                    optHeader.textContent = `Excel Column: "${h}"`;
+                    select.appendChild(optHeader);
                 });
 
-                // Auto-detect target field mapping
-                const clean = h.trim().toLowerCase().replace(/[\s_\-\.]/g, '');
-                if (clean === "customername" || clean === "consumername" || clean === "name") {
-                    select.value = "ConsumerName";
-                } else if (clean.includes("contact") || clean.includes("mobile") || clean.includes("phone")) {
-                    select.value = "MobileNo";
-                } else if (clean.includes("lpgid") || clean.includes("lpg id")) {
-                    select.value = "LpgId";
-                } else if (clean.includes("address")) {
-                    select.value = "Address";
-                } else if (clean.includes("refill")) {
-                    select.value = "LastRefillDate";
-                } else if (clean.includes("inspection")) {
-                    select.value = "SafetyInspectionDate";
-                } else if (clean.includes("bank")) {
-                    select.value = "BankAccountNo";
-                } else if (clean.includes("ifsc")) {
-                    select.value = "BankIfscCode";
+                // Auto-detect matching Excel column
+                const matchedHeader = headers.find(h => {
+                    const cleanH = h.trim().toLowerCase().replace(/[\s_\-\.]/g, '');
+                    const cleanFieldKey = field.key.toLowerCase();
+                    const cleanFieldLabel = field.label.toLowerCase().replace(/[\s_\-\.\(\)]/g, '');
+                    const cleanDefaultCol = field.defaultCol.toLowerCase().replace(/[\s_\-\.]/g, '');
+
+                    return cleanH === cleanFieldKey || 
+                           cleanH === cleanFieldLabel || 
+                           cleanH === cleanDefaultCol ||
+                           cleanH.includes(cleanFieldKey) ||
+                           cleanFieldKey.includes(cleanH);
+                });
+
+                if (matchedHeader) {
+                    select.value = matchedHeader;
                 } else {
-                    select.value = ""; // Default to None
+                    // For the most important fields (Customer Name & Mobile), default to "+ Create New Column"
+                    if (field.key === "ConsumerName" || field.key === "MobileNo") {
+                        select.value = "__new__";
+                    } else {
+                        select.value = ""; // Default to None
+                    }
                 }
 
                 rowDiv.appendChild(label);
@@ -1036,18 +1067,22 @@ async function processExcelAutoFill() {
     }
 
     // Build mapping settings
-    const mappings = {}; // Excel column header -> Database field
+    const mappings = []; // Array of { dbField, excelCol }
     const selects = document.querySelectorAll(".filler-target-field-select");
     selects.forEach(select => {
-        const col = select.getAttribute("data-column");
-        const field = select.value;
-        if (field) {
-            mappings[col] = field;
+        const dbField = select.getAttribute("data-db-field");
+        const defaultColName = select.getAttribute("data-default-col");
+        const val = select.value;
+
+        if (val === "__new__") {
+            mappings.push({ dbField, excelCol: defaultColName });
+        } else if (val) {
+            mappings.push({ dbField, excelCol: val });
         }
     });
 
-    if (Object.keys(mappings).length === 0) {
-        alert("Please map at least one column to fill from the database.");
+    if (mappings.length === 0) {
+        alert("Please map at least one field to fill from the database.");
         return;
     }
 
@@ -1083,16 +1118,15 @@ async function processExcelAutoFill() {
 
             if (matchedRecord) {
                 // Fill all mapped columns
-                for (let col in mappings) {
-                    const field = mappings[col];
-                    row[col] = matchedRecord[field] || "";
-                }
+                mappings.forEach(m => {
+                    row[m.excelCol] = matchedRecord[m.dbField] || "";
+                });
                 matchedCount++;
             } else {
                 // Leave mapped columns empty
-                for (let col in mappings) {
-                    row[col] = "";
-                }
+                mappings.forEach(m => {
+                    row[m.excelCol] = "";
+                });
                 unmatchedCount++;
             }
             return row;
