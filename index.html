@@ -127,7 +127,10 @@
                 <!-- Top Navbar -->
                 <header class="navbar">
                     <div class="nav-left">
-                        <h2 id="current-view-title">Dashboard Overview</h2>
+                        <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.25s ease;">
+                            <i data-lucide="menu" style="width: 18px; height: 18px;"></i>
+                        </button>
+                        <h2 id="current-view-title" style="margin-left: 0.75rem;">Dashboard Overview</h2>
                     </div>
                     <div class="nav-right">
                         <!-- Quick Search -->
@@ -152,42 +155,101 @@
                     <div id="dashboard-tab" class="tab-pane active">
                         <!-- KPI Metric Cards Grid -->
                         <div class="kpi-grid">
-                            <div class="kpi-card">
-                                <div class="kpi-icon blue">
-                                    <i data-lucide="users"></i>
+                            <!-- Card 1: Consumer Profile -->
+                            <div class="kpi-card-detailed">
+                                <div class="kpi-header">
+                                    <div class="kpi-icon blue">
+                                        <i data-lucide="users"></i>
+                                    </div>
+                                    <div class="kpi-title-block">
+                                        <h3>Total Consumers</h3>
+                                        <span id="kpi-total-consumers" class="kpi-val">0</span>
+                                    </div>
                                 </div>
-                                <div class="kpi-details">
-                                    <h3>Total Consumers</h3>
-                                    <span id="kpi-total-consumers" class="kpi-val">0</span>
-                                </div>
-                            </div>
-                            <div class="kpi-card">
-                                <div class="kpi-icon green">
-                                    <i data-lucide="shield-check"></i>
-                                </div>
-                                <div class="kpi-details">
-                                    <h3>eKYC Verified</h3>
-                                    <span id="kpi-ekyc-rate" class="kpi-val">0%</span>
-                                    <span id="kpi-ekyc-count" class="kpi-sub">0 of 0</span>
-                                </div>
-                            </div>
-                            <div class="kpi-card">
-                                <div class="kpi-icon gold">
-                                    <i data-lucide="indian-rupee"></i>
-                                </div>
-                                <div class="kpi-details">
-                                    <h3>Total Security Deposit</h3>
-                                    <span id="kpi-total-deposit" class="kpi-val">₹0</span>
+                                <div class="kpi-sub-rows">
+                                    <div class="kpi-sub-row">
+                                        <span class="sub-row-label"><i data-lucide="user-check" style="width: 12px; height: 12px; color: var(--accent-blue);"></i> PMUY (Ujjwala)</span>
+                                        <span id="kpi-pmuy-count" class="sub-row-value">0</span>
+                                    </div>
+                                    <div class="kpi-sub-row">
+                                        <span class="sub-row-label"><i data-lucide="user-x" style="width: 12px; height: 12px; color: var(--text-muted);"></i> Regular Connections</span>
+                                        <span id="kpi-non-pmuy-count" class="sub-row-value">0</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="kpi-card">
-                                <div class="kpi-icon purple">
-                                    <i data-lucide="container"></i>
+
+                            <!-- Card 2: eKYC Audit Status -->
+                            <div class="kpi-card-detailed">
+                                <div class="kpi-header">
+                                    <div class="kpi-icon green">
+                                        <i data-lucide="shield-check"></i>
+                                    </div>
+                                    <div class="kpi-title-block">
+                                        <h3>eKYC Verification</h3>
+                                        <span id="kpi-ekyc-rate" class="kpi-val">0%</span>
+                                    </div>
                                 </div>
-                                <div class="kpi-details">
-                                    <h3>Domestic (14.2kg)</h3>
-                                    <span id="kpi-domestic-count" class="kpi-val">0</span>
-                                    <span id="kpi-domestic-pct" class="kpi-sub">0% of total</span>
+                                <div class="kpi-sub-rows">
+                                    <div class="kpi-sub-row">
+                                        <span class="sub-row-label" style="color: var(--accent-green);"><i data-lucide="check" style="width: 12px; height: 12px;"></i> Completed</span>
+                                        <span id="kpi-ekyc-done-count" class="sub-row-value" style="color: var(--accent-green); font-weight: 600;">0</span>
+                                    </div>
+                                    <div class="kpi-sub-row">
+                                        <span class="sub-row-label" style="color: var(--accent-red);"><i data-lucide="clock" style="width: 12px; height: 12px;"></i> Pending</span>
+                                        <span id="kpi-ekyc-pending-count" class="sub-row-value" style="color: var(--accent-red); font-weight: 600;">0</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Card 3: Security Deposits -->
+                            <div class="kpi-card-detailed">
+                                <div class="kpi-header">
+                                    <div class="kpi-icon gold">
+                                        <i data-lucide="indian-rupee"></i>
+                                    </div>
+                                    <div class="kpi-title-block">
+                                        <h3>Security Deposits</h3>
+                                        <span id="kpi-total-deposit" class="kpi-val">₹0</span>
+                                    </div>
+                                </div>
+                                <div class="kpi-sub-rows">
+                                    <div class="kpi-sub-row">
+                                        <span class="sub-row-label"><i data-lucide="cylinder" style="width: 12px; height: 12px; color: var(--accent-blue);"></i> Cylinder Deposit</span>
+                                        <span id="kpi-cylinder-deposit" class="sub-row-value">₹0</span>
+                                    </div>
+                                    <div class="kpi-sub-row">
+                                        <span class="sub-row-label"><i data-lucide="settings" style="width: 12px; height: 12px; color: var(--accent-gold);"></i> Regulator Deposit</span>
+                                        <span id="kpi-regulator-deposit" class="sub-row-value">₹0</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Card 4: Cylinder Packages -->
+                            <div class="kpi-card-detailed">
+                                <div class="kpi-header">
+                                    <div class="kpi-icon purple">
+                                        <i data-lucide="flame"></i>
+                                    </div>
+                                    <div class="kpi-title-block">
+                                        <h3>Cylinder Sizes</h3>
+                                        <span id="kpi-domestic-count" class="kpi-val">0</span>
+                                    </div>
+                                </div>
+                                <div class="kpi-sub-rows">
+                                    <div class="kpi-sub-row">
+                                        <span class="sub-row-label" style="display: flex; flex-direction: column; gap: 2px;">
+                                            <span>Domestic (14.2kg)</span>
+                                            <span id="kpi-pkg14-deposit" style="font-size: 0.65rem; color: var(--text-muted);">Deposit: ₹0</span>
+                                        </span>
+                                        <span id="kpi-pkg14-count" class="sub-row-value">0</span>
+                                    </div>
+                                    <div class="kpi-sub-row">
+                                        <span class="sub-row-label" style="display: flex; flex-direction: column; gap: 2px;">
+                                            <span>Commercial (19kg)</span>
+                                            <span id="kpi-pkg19-deposit" style="font-size: 0.65rem; color: var(--text-muted);">Deposit: ₹0</span>
+                                        </span>
+                                        <span id="kpi-pkg19-count" class="sub-row-value">0</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>

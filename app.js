@@ -370,7 +370,16 @@ function generateKPIs() {
     const total = allConsumers.length;
     let ekycCount = 0;
     let totalDeposit = 0;
-    let domesticCount = 0;
+    
+    let cylinderDepositTotal = 0;
+    let regulatorDepositTotal = 0;
+    
+    let count14 = 0;
+    let deposit14 = 0;
+    let count19 = 0;
+    let deposit19 = 0;
+    
+    let pmuyCount = 0;
 
     allConsumers.forEach((consumer) => {
         // eKYC Flag
@@ -378,28 +387,64 @@ function generateKPIs() {
             ekycCount++;
         }
 
-        // Security Deposit (Aggregate DepositAmount)
+        // Security Deposit
         const deposit = parseFloat(consumer.DepositAmount) || 0;
         totalDeposit += deposit;
 
-        // Domestic Package check
-        const pkgDesc = (consumer.PackageCodeDescription || "").toLowerCase();
+        const cylDep = parseFloat(consumer.CylinderDepositAmount) || 0;
+        const regDep = parseFloat(consumer.RegulatorDepositAmount) || 0;
+        
+        if (cylDep === 0 && regDep === 0 && deposit > 0) {
+            cylinderDepositTotal += deposit; // safe fallback
+        } else {
+            cylinderDepositTotal += cylDep;
+            regulatorDepositTotal += regDep;
+        }
+
+        // PMUY check
         const nature = (consumer.NatureOfConnection || "").toLowerCase();
-        if (pkgDesc.includes("14.2 kg") || pkgDesc.includes("domestic") || pkgDesc.includes("sbc") || pkgDesc.includes("dbc") || nature.includes("domestic")) {
-            domesticCount++;
+        const type = (consumer.TypeOfConnection || "").toLowerCase();
+        const isPmuy = nature.includes("pmuy") || type.includes("pmuy") || nature.includes("ujjwala") || type.includes("ujjwala");
+        if (isPmuy) {
+            pmuyCount++;
+        }
+
+        // Cylinder Packages 14.2kg vs 19kg
+        const pkgDesc = (consumer.PackageCodeDescription || "").toLowerCase();
+        const connectionType = (consumer.TypeOfConnection || "").toLowerCase();
+        const isCommercial = pkgDesc.includes("19 kg") || pkgDesc.includes("19kg") || connectionType.includes("commercial") || connectionType.includes("19 kg");
+
+        if (isCommercial) {
+            count19++;
+            deposit19 += deposit;
+        } else {
+            count14++;
+            deposit14 += deposit;
         }
     });
 
     const ekycPct = total > 0 ? ((ekycCount / total) * 100).toFixed(1) : 0;
-    const domesticPct = total > 0 ? ((domesticCount / total) * 100).toFixed(1) : 0;
+    const nonPmuyCount = total - pmuyCount;
+    const ekycPending = total - ekycCount;
 
     // Set UI values
     document.getElementById("kpi-total-consumers").textContent = total.toLocaleString();
+    document.getElementById("kpi-pmuy-count").textContent = pmuyCount.toLocaleString();
+    document.getElementById("kpi-non-pmuy-count").textContent = nonPmuyCount.toLocaleString();
+    
     document.getElementById("kpi-ekyc-rate").textContent = `${ekycPct}%`;
-    document.getElementById("kpi-ekyc-count").textContent = `${ekycCount.toLocaleString()} of ${total.toLocaleString()}`;
-    document.getElementById("kpi-total-deposit").textContent = `₹${totalDeposit.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-    document.getElementById("kpi-domestic-count").textContent = domesticCount.toLocaleString();
-    document.getElementById("kpi-domestic-pct").textContent = `${domesticPct}% of total`;
+    document.getElementById("kpi-ekyc-done-count").textContent = ekycCount.toLocaleString();
+    document.getElementById("kpi-ekyc-pending-count").textContent = ekycPending.toLocaleString();
+    
+    document.getElementById("kpi-total-deposit").textContent = `₹${totalDeposit.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+    document.getElementById("kpi-cylinder-deposit").textContent = `₹${cylinderDepositTotal.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+    document.getElementById("kpi-regulator-deposit").textContent = `₹${regulatorDepositTotal.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+    
+    document.getElementById("kpi-domestic-count").textContent = count14.toLocaleString();
+    document.getElementById("kpi-pkg14-count").textContent = count14.toLocaleString();
+    document.getElementById("kpi-pkg14-deposit").textContent = `Deposit: ₹${deposit14.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+    document.getElementById("kpi-pkg19-count").textContent = count19.toLocaleString();
+    document.getElementById("kpi-pkg19-deposit").textContent = `Deposit: ₹${deposit19.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
 
 // ==========================================================================
@@ -1709,6 +1754,23 @@ function initEventListeners() {
     const btnProcessFiller = document.getElementById("btn-process-filler");
     if (btnProcessFiller) {
         btnProcessFiller.addEventListener("click", processExcelAutoFill);
+    }
+
+    const sidebarToggle = document.getElementById("sidebar-toggle");
+    const sidebar = document.querySelector(".sidebar");
+    if (sidebarToggle && sidebar) {
+        sidebarToggle.addEventListener("click", () => {
+            sidebar.classList.toggle("collapsed");
+            
+            // Trigger chart resize reflow
+            setTimeout(() => {
+                if (window.chartInstances) {
+                    Object.values(window.chartInstances).forEach(chart => {
+                        if (chart) chart.resize();
+                    });
+                }
+            }, 300);
+        });
     }
 }
 
